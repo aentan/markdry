@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=42"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "markdry"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "python-multipart>=0.0.9",
+    "pillow>=9.5",
+    "numpy>=1.24",
+    "torch>=2.0",
+    "torchvision>=0.15",
+    "onnxruntime>=1.17",
+    "aiofiles>=23.0",
+    "certifi",
+    "pywebview>=5.0",
+]
+
+[project.scripts]
+markdry = "markdry.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["markdry*"]
+
+[tool.setuptools.package-data]
+markdry = ["static/*"]

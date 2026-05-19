@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>markdry</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,1,0">
+<style>
+.material-symbols-rounded {
+  font-size: 18px;
+  line-height: 1;
+  user-select: none;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:           #0E0D0C;
+  --text:         #F1F0EF;
+  --text-dim:     rgba(241,240,239,0.45);
+  --accent:       #C0322B;
+  --accent-hover: #d63d35;
+  --border:       rgba(241,240,239,0.10);
+  --surface:      rgba(241,240,239,0.06);
+  --surface-hi:   rgba(241,240,239,0.10);
+}
+
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Inter", system-ui, sans-serif;
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Drop zone ─────────────────────────────────────────────────── */
+#dropzone {
+  position: fixed; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+#dropzone.over { background: rgba(192,50,43,0.08); }
+
+.drop-icon { width: 48px; height: 48px; opacity: 0.30; color: var(--text); }
+.drop-label { font-size: 20px; font-weight: 600; letter-spacing: -0.025em; margin-top: 16px; }
+.drop-sub { font-size: 12px; color: var(--text-dim); margin-top: 6px; }
+
+/* ── Upload overlay ────────────────────────────────────────────── */
+#upload-overlay {
+  position: fixed; inset: 0;
+  display: none;
+  flex-direction: column; align-items: center; justify-content: center;
+  gap: 18px;
+  background: var(--bg);
+  z-index: 200;
+}
+.spinner {
+  width: 34px; height: 34px;
+  border: 2.5px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.65s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Workspace ─────────────────────────────────────────────────── */
+#workspace {
+  position: fixed; inset: 0;
+  display: none;
+  flex-direction: column;
+}
+
+/* Square canvas area — letterboxes the video */
+#canvas-area {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  background: #000;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+}
+
+#canvas-wrap {
+  position: relative;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+#preview-canvas {
+  display: block;
+}
+
+/* delete button, positioned absolutely inside canvas-wrap */
+#del-btn {
+  position: absolute;
+  display: none;
+  align-items: center; justify-content: center;
+  width: 20px; height: 20px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 13px; line-height: 1;
+  cursor: pointer;
+  z-index: 5;
+  padding: 0;
+}
+#del-btn:hover { background: var(--accent-hover); }
+
+/* ── Bottom bar ────────────────────────────────────────────────── */
+#bar {
+  flex-shrink: 0;
+  height: 52px;
+  border-top: 1px solid var(--border);
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 18px;
+}
+
+#bar-left {
+  flex: 1;
+  display: flex; align-items: center; gap: 10px;
+  color: var(--text-dim);
+  overflow: hidden;
+}
+
+#mask-hint { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+#bar-right {
+  flex-shrink: 0;
+  display: flex; align-items: center; gap: 8px;
+}
+
+/* progress inside bar-left */
+#prog-wrap {
+  display: none;
+  flex: 1;
+  flex-direction: column; gap: 5px;
+}
+#prog-track {
+  height: 5px; background: var(--border); border-radius: 99px; overflow: hidden;
+}
+#prog-fill {
+  height: 100%; width: 0%;
+  background: var(--accent);
+  border-radius: 99px;
+  transition: width 0.25s ease-out;
+}
+#prog-label { font-size: 11px; color: var(--text-dim); }
+.colon-blink { animation: colon-flash 1s step-start infinite; }
+@keyframes colon-flash { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+#error-text {
+  display: none; flex: 1;
+  color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ── Buttons ───────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px;
+  padding: 0;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: background 0.1s;
+}
+.btn:hover:not(:disabled) { background: var(--surface-hi); }
+.btn:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
+.btn-accent { background: var(--accent); border-color: transparent; color: #fff; font-weight: 600; }
+.btn-accent:hover:not(:disabled) { background: var(--accent-hover); }
+</style>
+</head>
+<body>
+
+<!-- ── Drop zone ──────────────────────────────────────────────── -->
+<div id="dropzone">
+  <div style="text-align:center; pointer-events:none;">
+    <svg class="drop-icon" viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="3" y="9" width="34" height="26" rx="4" stroke="currentColor" stroke-width="2.4"/>
+      <path d="M37 19.5l12-8v27l-12-8V19.5z" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/>
+    </svg>
+    <p class="drop-label">Drop video to clean</p>
+    <p class="drop-sub">or click to browse &nbsp;·&nbsp; MP4 MOV MKV up to 500 MB</p>
+  </div>
+</div>
+
+<!-- ── Upload spinner ─────────────────────────────────────────── -->
+<div id="upload-overlay">
+  <div class="spinner"></div>
+  <span style="color:var(--text-dim)">Uploading…</span>
+</div>
+
+<!-- ── Workspace ──────────────────────────────────────────────── -->
+<div id="workspace">
+  <div id="canvas-area">
+    <div id="canvas-wrap">
+      <canvas id="preview-canvas"></canvas>
+      <button id="del-btn" title="Delete mask">×</button>
+    </div>
+  </div>
+
+  <div id="bar">
+    <div id="bar-left">
+      <span id="mask-hint">Drag to mark watermark regions</span>
+      <div id="prog-wrap">
+        <div id="prog-track"><div id="prog-fill"></div></div>
+        <span id="prog-label">Starting…</span>
+      </div>
+      <span id="error-text"></span>
+    </div>
+    <div id="bar-right">
+      <button id="clear-btn"   class="btn"        style="display:none" title="Clear masks"><span class="material-symbols-rounded">refresh</span></button>
+      <button id="process-btn" class="btn btn-accent" title="Process"><span class="material-symbols-rounded">check</span></button>
+      <button id="cancel-btn"  class="btn"        style="display:none" title="Cancel"><span class="material-symbols-rounded">close</span></button>
+      <button id="dl-btn"      class="btn btn-accent" style="display:none" title="Save video"><span class="material-symbols-rounded">download</span></button>
+      <button id="clear-video-btn" class="btn"    style="display:none" title="Clear"><span class="material-symbols-rounded">delete</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- hidden file input -->
+<input type="file" id="file-input" accept="video/*" style="display:none">
+
+<script type="module">
+// ── helpers ──────────────────────────────────────────────────────────────────
+const $  = id => document.getElementById(id);
+const show = (...els) => els.forEach(e => { e.style.display = ''; });
+const hide = (...els) => els.forEach(e => { e.style.display = 'none'; });
+const flex = (...els) => els.forEach(e => { e.style.display = 'flex'; });
+
+// ── element refs ─────────────────────────────────────────────────────────────
+const dropzone    = $('dropzone');
+const uploadOvl   = $('upload-overlay');
+const workspace   = $('workspace');
+const canvasWrap  = $('canvas-wrap');
+const canvas      = $('preview-canvas');
+const ctx         = canvas.getContext('2d');
+const delBtn      = $('del-btn');
+const maskHint    = $('mask-hint');
+const progWrap    = $('prog-wrap');
+const progFill    = $('prog-fill');
+const progLabel   = $('prog-label');
+const errorText   = $('error-text');
+const clearBtn      = $('clear-btn');
+const processBtn    = $('process-btn');
+const cancelBtn     = $('cancel-btn');
+const dlBtn         = $('dl-btn');
+const clearVideoBtn = $('clear-video-btn');
+const fileInput     = $('file-input');
+
+// ── app state ────────────────────────────────────────────────────────────────
+let phase = 'idle';
+let jobId = null;
+let srcW = 0, srcH = 0;
+
+// Letterbox geometry — video's position inside the square canvas.
+let imgScale = 1;
+let imgX = 0, imgY = 0, imgW = 0, imgH = 0;
+
+let rects      = [];  // {x,y,w,h} in canvas px
+let selIdx     = -1;
+let drawing    = false;
+let drawOrigin = null;
+let liveRect   = null;
+let es         = null;
+
+const img = new Image();
+img.onload = render;
+
+// ── state machine ─────────────────────────────────────────────────────────────
+function setPhase(p) {
+  phase = p;
+
+  hide(dropzone, uploadOvl, workspace, clearBtn, processBtn, cancelBtn,
+       dlBtn, clearVideoBtn, maskHint, progWrap, errorText);
+
+  if (p === 'idle') {
+    show(dropzone);
+    return;
+  }
+  if (p === 'uploading') {
+    flex(uploadOvl);
+    return;
+  }
+
+  flex(workspace);
+  show(clearVideoBtn);  // always visible in workspace
+
+  if (p === 'ready') {
+    flex(maskHint);
+    show(clearBtn, processBtn);
+    refreshHint();
+  } else if (p === 'processing') {
+    flex(progWrap);
+    show(cancelBtn);
+  } else if (p === 'done') {
+    show(dlBtn);
+  } else if (p === 'error') {
+    flex(errorText);
+    show(processBtn);
+  }
+}
+
+// ── drop zone ─────────────────────────────────────────────────────────────────
+dropzone.addEventListener('dragover',  e => { e.preventDefault(); dropzone.classList.add('over'); });
+dropzone.addEventListener('dragleave', ()=> dropzone.classList.remove('over'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.classList.remove('over');
+  const f = e.dataTransfer?.files[0];
+  if (f) upload(f);
+});
+dropzone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) upload(fileInput.files[0]); });
+
+// ── upload ────────────────────────────────────────────────────────────────────
+async function upload(file) {
+  setPhase('uploading');
+  const fd = new FormData();
+  fd.append('file', file);
+
+  let data;
+  try {
+    const res = await fetch('/api/upload', { method: 'POST', body: fd });
+    data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Upload failed');
+  } catch (err) {
+    setPhase('idle');
+    alert(err.message);
+    fileInput.value = '';
+    return;
+  }
+
+  jobId = data.job_id;
+  srcW  = data.width;
+  srcH  = data.height;
+
+  // Square canvas — fit the largest square in the available area.
+  const BAR_H   = 52;
+  const size    = Math.min(window.innerWidth, window.innerHeight - BAR_H);
+  canvas.width  = size;
+  canvas.height = size;
+  canvas.style.width  = size + 'px';
+  canvas.style.height = size + 'px';
+
+  imgScale = Math.min(size / srcW, size / srcH);
+  imgW = Math.round(srcW * imgScale);
+  imgH = Math.round(srcH * imgScale);
+  imgX = Math.round((size - imgW) / 2);
+  imgY = Math.round((size - imgH) / 2);
+
+  rects  = [];
+  selIdx = -1;
+  hideDelBtn();
+
+  img.src = data.preview_url;
+  setPhase('ready');
+}
+
+// ── mask hint ─────────────────────────────────────────────────────────────────
+function refreshHint() {
+  if (selIdx >= 0 && rects[selIdx]) {
+    const r  = rects[selIdx];
+    const sx = Math.round((r.x - imgX) / imgScale);
+    const sy = Math.round((r.y - imgY) / imgScale);
+    const sw = Math.round(r.w / imgScale);
+    const sh = Math.round(r.h / imgScale);
+    maskHint.textContent =
+      `Selected: ${sx}, ${sy}  ${sw} × ${sh} px  ·  ${rects.length} mask${rects.length !== 1 ? 's' : ''}`;
+  } else if (rects.length === 0) {
+    maskHint.textContent = 'Drag to mark watermark regions';
+  } else {
+    maskHint.textContent = `${rects.length} mask${rects.length !== 1 ? 's' : ''} · click a mask to select`;
+  }
+}
+
+// ── canvas interaction ────────────────────────────────────────────────────────
+canvasWrap.addEventListener('mousedown', onDown);
+window.addEventListener('mousemove', onMove);
+window.addEventListener('mouseup',   onUp);
+canvasWrap.addEventListener('click',  onClick);
+
+function canvasPos(e) {
+  const r = canvas.getBoundingClientRect();
+  // Map CSS pixels → canvas pixels (canvas fills the element 1:1 via CSS)
+  const scx = canvas.width  / r.width;
+  const scy = canvas.height / r.height;
+  return { x: (e.clientX - r.left) * scx, y: (e.clientY - r.top) * scy };
+}
+
+function inVideoArea(p) {
+  return p.x >= imgX && p.x <= imgX + imgW && p.y >= imgY && p.y <= imgY + imgH;
+}
+
+function inRect(r, p) {
+  return p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
+}
+
+function makeRect(a, b) {
+  return {
+    x: Math.min(a.x, b.x),
+    y: Math.min(a.y, b.y),
+    w: Math.abs(b.x - a.x),
+    h: Math.abs(b.y - a.y),
+  };
+}
+
+function clampRect(r) {
+  const x = Math.max(imgX, Math.min(r.x, imgX + imgW));
+  const y = Math.max(imgY, Math.min(r.y, imgY + imgH));
+  const w = Math.min(r.w, imgX + imgW - x);
+  const h = Math.min(r.h, imgY + imgH - y);
+  return { x, y, w, h };
+}
+
+function onDown(e) {
+  if (phase !== 'ready') return;
+  if (e.button !== 0) return;
+
+  const pos = canvasPos(e);
+  const hit = rects.reduceRight((found, r, i) => found >= 0 ? found : (inRect(r, pos) ? i : -1), -1);
+  if (hit >= 0) {
+    selIdx = hit;
+    placeDelBtn(rects[hit]);
+    render();
+    refreshHint();
+    return;
+  }
+
+  if (!inVideoArea(pos)) return;
+
+  selIdx = -1;
+  hideDelBtn();
+  drawing    = true;
+  drawOrigin = pos;
+  liveRect   = null;
+}
+
+function onMove(e) {
+  const pos = canvasPos(e);
+  if (!drawing) {
+    const hit = rects.some(r => inRect(r, pos));
+    canvasWrap.style.cursor = inVideoArea(pos) ? (hit ? 'pointer' : 'crosshair') : 'default';
+    return;
+  }
+  liveRect = clampRect(makeRect(drawOrigin, pos));
+  render();
+}
+
+function onUp(e) {
+  if (!drawing) return;
+  drawing = false;
+  if (liveRect && liveRect.w > 3 && liveRect.h > 3) {
+    rects.push(liveRect);
+    selIdx = rects.length - 1;
+    placeDelBtn(liveRect);
+    refreshHint();
+  }
+  liveRect = null;
+  render();
+}
+
+function onClick(e) {
+  if (drawing) return;
+  const pos = canvasPos(e);
+  const hit = rects.reduceRight((f, r, i) => f >= 0 ? f : (inRect(r, pos) ? i : -1), -1);
+  if (hit < 0) {
+    selIdx = -1;
+    hideDelBtn();
+    render();
+    refreshHint();
+  }
+}
+
+function placeDelBtn(r) {
+  const left = Math.min(r.x + r.w - 22, imgX + imgW - 22);
+  const top  = Math.max(r.y + 2, imgY);
+  delBtn.style.left    = `${left}px`;
+  delBtn.style.top     = `${top}px`;
+  delBtn.style.display = 'flex';
+}
+function hideDelBtn() { delBtn.style.display = 'none'; }
+
+delBtn.addEventListener('click', e => {
+  e.stopPropagation();
+  if (selIdx >= 0) {
+    rects.splice(selIdx, 1);
+    selIdx = -1;
+    hideDelBtn();
+    render();
+    refreshHint();
+  }
+});
+
+clearBtn.addEventListener('click', () => {
+  rects  = [];
+  selIdx = -1;
+  hideDelBtn();
+  render();
+  refreshHint();
+});
+
+// ── render ────────────────────────────────────────────────────────────────────
+function render() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (img.complete && img.naturalWidth) {
+    // Letterbox bars
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, imgX, imgY, imgW, imgH);
+  }
+  rects.forEach((r, i) => drawRect(r, i === selIdx, false));
+  if (liveRect) drawRect(liveRect, false, true);
+}
+
+function drawRect(r, selected, live) {
+  ctx.save();
+  ctx.fillStyle = selected ? 'rgba(192,50,43,0.42)' : 'rgba(192,50,43,0.28)';
+  ctx.fillRect(r.x, r.y, r.w, r.h);
+  ctx.strokeStyle = '#C0322B';
+  ctx.lineWidth   = selected ? 2.5 : 1.5;
+  if (live) ctx.setLineDash([5, 4]);
+  ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
+  ctx.restore();
+}
+
+// ── process ───────────────────────────────────────────────────────────────────
+processBtn.addEventListener('click', async () => {
+  if (rects.length === 0) {
+    alert('Draw at least one rectangle over the watermark area first.');
+    return;
+  }
+
+  // Convert canvas px → source px (undo letterbox offset and scale).
+  const sourceRects = rects.map(r => ({
+    x: Math.round((r.x - imgX) / imgScale),
+    y: Math.round((r.y - imgY) / imgScale),
+    w: Math.round(r.w / imgScale),
+    h: Math.round(r.h / imgScale),
+  }));
+
+  setPhase('processing');
+  progFill.style.width = '0%';
+  progLabel.textContent = 'Starting…';
+
+  try {
+    const res = await fetch(`/api/process/${jobId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rects: sourceRects }),
+    });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      throw new Error(d.detail || 'Failed to start processing');
+    }
+  } catch (err) {
+    errorText.textContent = err.message;
+    setPhase('error');
+    return;
+  }
+
+  openSSE();
+});
+
+function openSSE() {
+  if (es) { es.close(); es = null; }
+
+  es = new EventSource(`/api/progress/${jobId}`);
+
+  es.onmessage = e => {
+    let data;
+    try { data = JSON.parse(e.data); } catch { return; }
+
+    if (data.type === 'progress') {
+      const pct = data.total > 0 ? (data.frame / data.total * 100) : 0;
+      progFill.style.width = `${pct.toFixed(1)}%`;
+      let etaPart = '';
+      if (data.eta_seconds > 0) {
+        const t = Math.round(data.eta_seconds);
+        const h = String(Math.floor(t / 3600)).padStart(2, '0');
+        const m = String(Math.floor((t % 3600) / 60)).padStart(2, '0');
+        const s = String(t % 60).padStart(2, '0');
+        const c = '<span class="colon-blink">:</span>';
+        etaPart = ` · ${h}${c}${m}${c}${s}`;
+      }
+      progLabel.innerHTML = `Frame ${data.frame} of ${data.total}${etaPart}`;
+
+    } else if (data.type === 'done') {
+      es.close(); es = null;
+      setPhase('done');
+
+    } else if (data.type === 'cancelled') {
+      es.close(); es = null;
+      setPhase('ready');
+
+    } else if (data.type === 'error') {
+      es.close(); es = null;
+      errorText.textContent = data.message || 'Processing failed.';
+      setPhase('error');
+    }
+  };
+
+  es.onerror = () => {
+    if (phase === 'processing') {
+      es?.close(); es = null;
+      errorText.textContent = 'Lost connection to server during processing.';
+      setPhase('error');
+    }
+  };
+}
+
+// ── cancel ────────────────────────────────────────────────────────────────────
+cancelBtn.addEventListener('click', async () => {
+  es?.close(); es = null;
+  await fetch(`/api/job/${jobId}`, { method: 'DELETE' }).catch(() => {});
+  setPhase('ready');
+});
+
+// ── save video ────────────────────────────────────────────────────────────────
+dlBtn.addEventListener('click', async () => {
+  dlBtn.disabled = true;
+  try {
+    await window.pywebview.api.download(jobId);
+  } finally {
+    dlBtn.disabled = false;
+  }
+});
+
+// ── clear video ───────────────────────────────────────────────────────────────
+function clearVideo() {
+  if (es) { es.close(); es = null; }
+  if (jobId) fetch(`/api/job/${jobId}`, { method: 'DELETE' }).catch(() => {});
+  jobId  = null;
+  rects  = [];
+  selIdx = -1;
+  hideDelBtn();
+  fileInput.value = '';
+  setPhase('idle');
+}
+clearVideoBtn.addEventListener('click', clearVideo);
+</script>
+</body>
+</html>

@@ -1,0 +1,34 @@
+#!/bin/bash
+# Locate a Python 3.11+ and run markdry.
+# The .app lives inside the repo root: <repo>/markdry.app/Contents/MacOS/markdry
+REPO_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
+LOG_DIR="$HOME/.markdry"
+mkdir -p "$LOG_DIR"
+
+PYTHON=""
+for py in \
+    "$HOME/.local/bin/python3" \
+    "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3" \
+    "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3" \
+    "/Library/Frameworks/Python.framework/Versions/3.11/bin/python3" \
+    "/opt/homebrew/bin/python3" \
+    "/usr/local/bin/python3" \
+    "/usr/bin/python3"; do
+    if [ -x "$py" ]; then
+        PYTHON="$py"
+        break
+    fi
+done
+
+if [ -z "$PYTHON" ]; then
+    osascript -e 'display dialog "Python 3.11 or later is required but was not found." buttons {"OK"} default button "OK" with icon stop with title "markdry"'
+    exit 1
+fi
+
+# Add common tool paths so ffmpeg/ffprobe are found (macOS .app gets minimal PATH).
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+
+# Add repo to PYTHONPATH so the package is importable even without pip install.
+export PYTHONPATH="$REPO_DIR${PYTHONPATH:+:$PYTHONPATH}"
+
+exec arch -arm64 "$PYTHON" -m markdry gui >> "$LOG_DIR/launcher.log" 2>&1
