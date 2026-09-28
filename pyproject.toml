@@ -1,11 +1,13 @@
 [build-system]
-requires = ["setuptools>=42"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "markdry"
 version = "0.1.0"
 requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = [
     "fastapi>=0.110",
     "uvicorn[standard]>=0.29",

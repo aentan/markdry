@@ -30,3 +30,7 @@ On first run, the LaMa model (~196 MB) is downloaded once to `~/.cache/torch/`.
 4. Click **Download clean video** when done.
 
 Audio is preserved. Processing uses the same static mask for every frame.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
